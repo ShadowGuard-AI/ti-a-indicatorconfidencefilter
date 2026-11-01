@@ -36,8 +36,10 @@ def validate_indicator(indicator):
 
      if "confidence" not in indicator:
           logging.warning("Indicator missing 'confidence' field. Setting confidence to 0.")
+          # I mutate the callers dictionary here instead of just failing the entry. With a threshold of zero this same entry is then kept, carrying a confidence I invented, and the loaded list the caller holds is changed as a side effect of validating it.
           indicator["confidence"] = 0 #Set to 0 to ensure it's filtered out if the user sets a >0 threshold
 
+     # A boolean passes this check, because bool is a kind of int in Python. A confidence of true therefore compares as 1 later on, which is nonsense data getting a free pass from a check that looks strict.
      if not isinstance(indicator["confidence"], int):
           logging.warning("Indicator 'confidence' is not an integer. Skipping.")
           return False
@@ -60,6 +62,7 @@ def filter_indicators(indicators, min_confidence):
             continue  # Skip invalid indicators
 
         try:
+            # Nothing checks the value against 0 to 100 at the entry level, only the threshold gets that check in main. A confidence of 900 sails past any threshold a caller is allowed to set.
             if indicator["confidence"] >= min_confidence:
                 filtered_indicators.append(indicator)
         except (KeyError, TypeError) as e:
@@ -83,6 +86,7 @@ def load_indicators_from_file(input_file):
         with open(input_file, "r") as f:
             try:
                 indicators = json.load(f)
+                # A top level object instead of a list is refused here rather than treated as one indicator. Feeds that wrap their list in an envelope key fail this same way, and the error message does not say that is what happened.
                 if not isinstance(indicators, list):
                     logging.error("Input file does not contain a list of indicators.")
                     return None
@@ -108,6 +112,7 @@ def write_indicators_to_file(indicators, output_file):
     """
     try:
         with open(output_file, "w") as f:
+            # A write failure here is only logged, and main has already moved on. The process can finish with exit 0 and no output file, so a caller chaining on the exit code will think a filtered file exists when it does not.
             json.dump(indicators, f, indent=4)
         logging.info(f"Filtered indicators written to: {output_file}")
     except IOError as e:
@@ -126,6 +131,7 @@ def main():
         sys.exit(1)
 
     indicators = load_indicators_from_file(args.input_file)
+    # None is the load failure signal, kept apart from an empty list. An empty list is a valid, if useless, input and flows on to print an empty result with success, which is a different claim from a file I could not read.
     if indicators is None:
         sys.exit(1)  # Exit if loading indicators failed.
 
