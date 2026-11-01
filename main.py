@@ -35,12 +35,13 @@ def validate_indicator(indicator):
           return False
 
      if "confidence" not in indicator:
-          logging.warning("Indicator missing 'confidence' field. Setting confidence to 0.")
-          # I mutate the callers dictionary here instead of just failing the entry. With a threshold of zero this same entry is then kept, carrying a confidence I invented, and the loaded list the caller holds is changed as a side effect of validating it.
-          indicator["confidence"] = 0 #Set to 0 to ensure it's filtered out if the user sets a >0 threshold
+          logging.warning("Indicator missing 'confidence' field. Skipping.")
+          return False
 
-     # A boolean passes this check, because bool is a kind of int in Python. A confidence of true therefore compares as 1 later on, which is nonsense data getting a free pass from a check that looks strict.
-     if not isinstance(indicator["confidence"], int):
+     # bool is a subclass of int in Python, so reject it explicitly:
+     # a JSON true or false is not a numeric confidence score, and
+     # non-numeric types are rejected for the same reason.
+     if isinstance(indicator["confidence"], bool) or not isinstance(indicator["confidence"], int):
           logging.warning("Indicator 'confidence' is not an integer. Skipping.")
           return False
      return True
@@ -131,9 +132,13 @@ def main():
         sys.exit(1)
 
     indicators = load_indicators_from_file(args.input_file)
-    # None is the load failure signal, kept apart from an empty list. An empty list is a valid, if useless, input and flows on to print an empty result with success, which is a different claim from a file I could not read.
     if indicators is None:
         sys.exit(1)  # Exit if loading indicators failed.
+
+    if not indicators:
+        logging.error("No indicators in input: zero indicators were loaded, so no filtering was performed.")
+        print("No indicators in input: nothing was filtered.")
+        sys.exit(1)
 
     filtered_indicators = filter_indicators(indicators, args.min_confidence)
 
