@@ -44,6 +44,9 @@ def validate_indicator(indicator):
      if isinstance(indicator["confidence"], bool) or not isinstance(indicator["confidence"], int):
           logging.warning("Indicator 'confidence' is not an integer. Skipping.")
           return False
+     if not 0 <= indicator["confidence"] <= 100:
+          logging.warning("Indicator 'confidence' is outside the 0 to 100 range. Skipping.")
+          return False
      return True
 
 
@@ -63,7 +66,7 @@ def filter_indicators(indicators, min_confidence):
             continue  # Skip invalid indicators
 
         try:
-            # Nothing checks the value against 0 to 100 at the entry level, only the threshold gets that check in main. A confidence of 900 sails past any threshold a caller is allowed to set.
+            # validate_indicator has already rejected scores outside 0 to 100.
             if indicator["confidence"] >= min_confidence:
                 filtered_indicators.append(indicator)
         except (KeyError, TypeError) as e:
@@ -113,11 +116,12 @@ def write_indicators_to_file(indicators, output_file):
     """
     try:
         with open(output_file, "w") as f:
-            # A write failure here is only logged, and main has already moved on. The process can finish with exit 0 and no output file, so a caller chaining on the exit code will think a filtered file exists when it does not.
             json.dump(indicators, f, indent=4)
         logging.info(f"Filtered indicators written to: {output_file}")
+        return True
     except IOError as e:
         logging.error(f"Error writing to output file: {e}")
+        return False
 
 
 def main():
@@ -143,7 +147,8 @@ def main():
     filtered_indicators = filter_indicators(indicators, args.min_confidence)
 
     if args.output_file:
-        write_indicators_to_file(filtered_indicators, args.output_file)
+        if not write_indicators_to_file(filtered_indicators, args.output_file):
+            sys.exit(1)
     else:
         print(json.dumps(filtered_indicators, indent=4))  # Print to stdout
 
